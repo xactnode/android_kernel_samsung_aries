@@ -737,12 +737,12 @@ struct gain_info_t voicecall_gain_table[VOICECALL_GAIN_NUM] = {
 		.mode = VOICECALL_SPK,
 		.reg  = WM8994_INPUT_MIXER_3,		/* 29h */
 		.mask = WM8994_IN1L_MIXINL_VOL_MASK | WM8994_MIXOUTL_MIXINL_VOL_MASK,
-		.gain = 0x10     /* Mic +7.5dB */
+		.gain = 0x12     /* Mic +7.5dB */
 	}, {
 		.mode = VOICECALL_SPK,
 		.reg  = WM8994_LEFT_LINE_INPUT_1_2_VOLUME,	/* 18h */
 		.mask = WM8994_IN1L_VOL_MASK,
-		.gain = WM8994_IN1L_VU | 0x12   /* Mic +30dB */
+		.gain = WM8994_IN1L_VU | 0x16   /* Mic +30dB */
 	}, {
 		.mode = VOICECALL_SPK,
 		.reg  = WM8994_SPKMIXL_ATTENUATION,	/* 22h */
