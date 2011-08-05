@@ -93,6 +93,11 @@
 #define	CMD_INFO_LONGITUDE_LATITUDE	0xA3
 #define	CMD_INFO_ALTITUDE		0xA4
 #define	CMD_SET_FLASH			0xB2
+
+#ifdef CONFIG_SAMSUNG_FASCINATE
+#define CMD_SET_FLASH_POWER             0xB3        // sunggeun DG12 ATLAS
+#endif
+
 #define	CMD_SET_DZOOM			0xB9
 #define	CMD_GET_DZOOM_LEVEL		0xBA
 #define	CMD_SET_EFFECT_SHOT		0xC0
@@ -122,6 +127,9 @@ static unsigned char ce147_buf_set_dzoom[31] = {
 	0x3f
 };
 static int DZoom_State;
+#ifdef CONFIG_SAMSUNG_FASCINATE
+static int Flash_Mode = 0; //SecFeature.Camera aswoogi
+#endif
 
 enum ce147_oprmode {
 	CE147_OPRMODE_VIDEO = 0,
@@ -141,6 +149,9 @@ static int ce147_set_white_balance(struct v4l2_subdev *sd,
 				struct v4l2_control *ctrl);
 static int ce147_s_ext_ctrl(struct v4l2_subdev *sd,
 				struct v4l2_ext_control *ctrl);
+#ifdef CONFIG_SAMSUNG_FASCINATE
+static int ce147_set_preflash(struct v4l2_subdev *sd, int flash_mode); //SecFeature.Camera aswoogi
+#endif
 
 enum {
 	AUTO_FOCUS_FAILED,
@@ -2488,6 +2499,19 @@ static int ce147_set_capture_config(struct v4l2_subdev *sd,
 		}
 	}
 
+#ifdef CONFIG_SAMSUNG_FASCINATE
+	/*
+ 	 * Set Flash //SecFeature.Camera aswoogi
+ 	 */
+    
+	err = ce147_set_awb_lock(sd, 0);
+	if(err < 0){
+		dev_err(&client->dev, "%s: failed: ce147_set_awb_lock, err %d\n", __func__, err);
+		return -EIO;
+	}
+        ce147_set_preflash(sd, 1); //SecFeature.Camera aswoogi	
+#endif
+
 	/*
 	 * Set AWB Lock
 	 */
@@ -2683,6 +2707,14 @@ static int ce147_set_flash(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 	unsigned char ce147_buf_set_flash_manual[2] = { 0x00, 0x00 };
 	unsigned int ce147_len_set_flash_manual = 2;
 
+#ifdef CONFIG_SAMSUNG_FASCINATE
+	unsigned char ce147_buf_set_flash_power_control[4] = {0x03,0x01,0x1D,0x0c};
+	unsigned int ce147_len_set_flash_power_control = 4;
+
+	if(ctrl->value != FLASH_MODE_TORCH_ON && ctrl->value != FLASH_MODE_TORCH_OFF)
+		Flash_Mode = ctrl->value; //SecFeature.Camera aswoogi
+#endif
+
 	switch (ctrl->value) {
 	case FLASH_MODE_OFF:
 		ce147_buf_set_flash[1] = 0x00;
@@ -2696,17 +2728,45 @@ static int ce147_set_flash(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 		ce147_buf_set_flash[1] = 0x01;
 		break;
 
+#ifdef CONFIG_SAMSUNG_FASCINATE
+	case FLASH_MODE_TORCH_ON://SecFeature.SPRINT by aswoogi
+		ce147_buf_set_flash_manual[1] = 0x01;
+	break;
+
+	case FLASH_MODE_TORCH_OFF://SecFeature.SPRINT by aswoogi
+		ce147_buf_set_flash_manual[1] = 0x00;
+	break;
+
+	case FLASH_MODE_BACKLIGHT_ON: //SecFeature.SPRINT by aswoogi
+		ce147_buf_set_flash_power_control[1] = 0x00;
+		ce147_buf_set_flash[1] = 0x01;
+	break;
+#else
 	case FLASH_MODE_TORCH:
 		ce147_buf_set_flash_manual[1] = 0x01;
 		break;
+#endif
 
 	default:
 		ce147_buf_set_flash[1] = 0x00;
 		break;
 	}
 
+#ifdef CONFIG_SAMSUNG_FASCINATE
+	// set flash power
+	err = ce147_i2c_write_multi(client, CMD_SET_FLASH_POWER, ce147_buf_set_flash_power_control, ce147_len_set_flash_power_control);
+	if(err < 0){
+		dev_err(&client->dev, "%s: failed: i2c_write for set_flash_power\n", __func__);
+		return -EIO;
+	}
+#endif
+
 	/* need	to modify flash off for	torch mode */
+#ifdef CONFIG_SAMSUNG_FASCINATE
+	if(ctrl->value == FLASH_MODE_TORCH_ON ||ctrl->value == FLASH_MODE_TORCH_OFF) { //SecFeature.SPRINT by aswoogi
+#else
 	if (ctrl->value == FLASH_MODE_OFF) {
+#endif
 		err = ce147_i2c_write_multi(client, CMD_SET_FLASH_MANUAL,
 				ce147_buf_set_flash_manual,
 				ce147_len_set_flash_manual);
@@ -2730,6 +2790,112 @@ static int ce147_set_flash(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 
 	return 0;
 }
+
+#ifdef CONFIG_SAMSUNG_FASCINATE
+static int ce147_set_preflash(struct v4l2_subdev *sd, int flash_mode) //SecFeature.Camera aswoogi
+{
+    int err;
+    struct i2c_client *client = v4l2_get_subdevdata(sd);
+
+    unsigned char ce147_buf_set_preflash[2] = { 0x01, 0x00 };
+    unsigned int ce147_len_set_preflash = 2;
+    unsigned char ce147_buf_set_preflash_manual[2] = { 0x00, 0x00 };
+    unsigned int ce147_len_set_preflash_manual = 2;
+    unsigned char ce147_buf_set_flash[2] = { 0x03, 0x00 };
+    unsigned int ce147_len_set_flash = 2;
+    unsigned char ce147_buf_set_flash_manual[2] = { 0x00, 0x00 };
+    unsigned int ce147_len_set_flash_manual = 2;
+    unsigned char ce147_buf_set_flash_off[2] = { 0x03, 0x00 };
+    unsigned int ce147_len_set_flash_off = 2;
+    unsigned char ce147_buf_set_preflash_off[2] = { 0x01, 0x00 };
+    unsigned int ce147_len_set_preflash_off = 2;
+    unsigned char ce147_buf_set_preflash_init[2] = { 0x02, 0x02 };//SecFeature.SPRINT by aswoogi
+    unsigned int ce147_len_set_preflash_init = 2;
+    unsigned char ce147_buf_set_preflash_init2[2] = { 0x02, 0x00 };//SecFeature.SPRINT by aswoogi
+    unsigned int ce147_len_set_preflash_init2 = 2;
+
+
+     	ce147_msg(&client->dev, "%s, %d\n", __func__, flash_mode);
+
+    switch(Flash_Mode)
+    {
+        case FLASH_MODE_OFF:
+            ce147_buf_set_preflash[1] = 0x00;
+            ce147_buf_set_flash[1] = 0x00;
+        break;
+
+        case FLASH_MODE_AUTO:
+            ce147_buf_set_preflash[1] = 0x02;
+            ce147_buf_set_flash[1] = 0x02;
+                	err = ce147_i2c_write_multi(client, 0x07, ce147_buf_set_preflash_init2, ce147_len_set_preflash_init2);//SecFeature.SPRINT by aswoogi
+                	if(err < 0){
+                		dev_err(&client->dev, "%s: failed: i2c_write for set_preflash\n", __func__);
+                		return -EIO;
+                	}
+        break;
+
+        case FLASH_MODE_ON:
+            ce147_buf_set_preflash[1] = 0x01;
+            ce147_buf_set_flash[1] = 0x01;
+                	err = ce147_i2c_write_multi(client, 0x07, ce147_buf_set_preflash_init2, ce147_len_set_preflash_init2);//SecFeature.SPRINT by aswoogi
+                	if(err < 0){
+                		dev_err(&client->dev, "%s: failed: i2c_write for set_preflash\n", __func__);
+                		return -EIO;
+                	}
+        break;
+
+		case FLASH_MODE_BACKLIGHT_ON://SecFeature.SPRINT by aswoogi
+			ce147_buf_set_preflash[1] = 0x01;
+			ce147_buf_set_flash[1] = 0x01;
+                	err = ce147_i2c_write_multi(client, 0x07, ce147_buf_set_preflash_init, ce147_len_set_preflash_init);
+                	if(err < 0){
+                		dev_err(&client->dev, "%s: failed: i2c_write for set_preflash\n", __func__);
+                		return -EIO;
+                	}
+		break;
+        default:
+            ce147_buf_set_preflash[1] = 0x00;
+            ce147_buf_set_flash[1] = 0x00;
+        break;
+    }
+
+    //need to modify flash off for torch mode
+        if(flash_mode == 0)
+        {
+            err = ce147_i2c_write_multi(client, CMD_SET_FLASH, ce147_buf_set_preflash, ce147_len_set_preflash);
+            if(err < 0){
+                dev_err(&client->dev, "%s: failed: i2c_write for set_preflash\n", __func__);
+                return -EIO;
+            }
+
+            err = ce147_i2c_write_multi(client, CMD_SET_FLASH, ce147_buf_set_flash_off, ce147_len_set_flash_off);
+            if(err < 0){
+                dev_err(&client->dev, "%s: failed: i2c_write for set_flash_off\n", __func__);
+                return -EIO;
+            }
+
+            dev_err(&client->dev, "%s: done, preflash: 0x%02x\n", __func__, ce147_buf_set_preflash[1]);
+        }
+        else
+        {
+            err = ce147_i2c_write_multi(client, CMD_SET_FLASH, ce147_buf_set_flash, ce147_len_set_flash);
+            if(err < 0){
+                dev_err(&client->dev, "%s: failed: i2c_write for set_flash\n", __func__);
+                return -EIO;
+            }
+
+            err = ce147_i2c_write_multi(client, CMD_SET_FLASH, ce147_buf_set_preflash_off, ce147_len_set_preflash_off);
+            if(err < 0){
+                dev_err(&client->dev, "%s: failed: i2c_write for set_preflash_off\n", __func__);
+                return -EIO;
+            }
+
+            ce147_msg(&client->dev, "%s: done, flash: 0x%02x\n", __func__, ce147_buf_set_flash[1]);
+        }
+
+    return 0;
+}
+#endif
 
 static int ce147_set_effect(struct v4l2_subdev *sd, struct v4l2_control *ctrl)
 {
