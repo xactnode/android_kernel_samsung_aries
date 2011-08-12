@@ -1461,8 +1461,12 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		}
 		host->rescan_disable = 0;
 		spin_unlock_irqrestore(&host->lock, flags);
+#ifndef CONFIG_SAMSUNG_FASCINATE
 		if (!host->card || host->card->type != MMC_TYPE_SDIO)
 			mmc_detect_change(host, 0);
+#else
+		mmc_detect_change(host, 0);
+#endif
 
 	}
 
