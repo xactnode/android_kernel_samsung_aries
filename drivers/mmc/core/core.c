@@ -1465,9 +1465,6 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		if (!host->card || host->card->type != MMC_TYPE_SDIO)
 #endif
 			mmc_detect_change(host, 0);
-#else
-		mmc_detect_change(host, 0);
-#endif
 
 	}
 
